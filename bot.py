@@ -1,6 +1,7 @@
-"""Telegram bot to update Supabase database."""
+"""Telegram bot (webhook mode) to update Supabase database."""
 
 import os
+from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from supabase_client import get_supabase
@@ -8,12 +9,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Get bot token
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
+app = FastAPI()
+application = Application.builder().token(BOT_TOKEN).build()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a message when the command /start is issued."""
+
+# -------- Commands -------- #
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Hi! Use:\n"
         "/set_delivery_charge <value>\n"
@@ -22,10 +26,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-async def set_delivery_charge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Update delivery_charge in the database."""
+async def set_delivery_charge(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        value = int(float(context.args[0]))  # handles decimals too
+        value = int(float(context.args[0]))
         supabase = get_supabase()
 
         supabase.table('config') \
@@ -41,8 +44,7 @@ async def set_delivery_charge(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(f"Error: {str(e)}")
 
 
-async def start_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Set is_delivery_closed = False (orders open)."""
+async def start_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         supabase = get_supabase()
 
@@ -57,8 +59,7 @@ async def start_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(f"Error: {str(e)}")
 
 
-async def close_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Set is_delivery_closed = True (orders closed)."""
+async def close_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         supabase = get_supabase()
 
@@ -73,17 +74,23 @@ async def close_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(f"Error: {str(e)}")
 
 
-def main() -> None:
-    """Start the bot."""
-    application = Application.builder().token(BOT_TOKEN).build()
+# -------- Register handlers -------- #
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("set_delivery_charge", set_delivery_charge))
-    application.add_handler(CommandHandler("start_orders", start_orders))
-    application.add_handler(CommandHandler("close_orders", close_orders))
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("set_delivery_charge", set_delivery_charge))
+application.add_handler(CommandHandler("start_orders", start_orders))
+application.add_handler(CommandHandler("close_orders", close_orders))
 
-    application.run_polling()
 
+# -------- Webhook endpoint -------- #
+
+@app.post("/")
+async def webhook(request: Request):
+    data = await request.json()
+    update = Update.de_json(data, application.bot)
+    await application.process_update(update)
+    return {"ok": True}
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
