@@ -82,7 +82,21 @@ application.add_handler(CommandHandler("start_orders", start_orders))
 application.add_handler(CommandHandler("close_orders", close_orders))
 
 
-# -------- Webhook endpoint -------- #
+# -------- Lifecycle Fix (IMPORTANT) -------- #
+
+@app.on_event("startup")
+async def startup():
+    await application.initialize()
+    await application.start()
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    await application.stop()
+    await application.shutdown()
+
+
+# -------- Webhook Endpoint -------- #
 
 @app.post("/")
 async def webhook(request: Request):
