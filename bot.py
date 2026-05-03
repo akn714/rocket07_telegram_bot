@@ -91,6 +91,28 @@ async def webhook(request: Request):
     await application.process_update(update)
     return {"ok": True}
 
+@app.get("/check-alive")
+async def check_alive():
+    status = {
+        "server": "ok"
+    }
+
+    # Optional: check Supabase connectivity
+    try:
+        supabase = get_supabase()
+        supabase.table("config").select("*").limit(1).execute()
+        status["supabase"] = "ok"
+    except Exception as e:
+        status["supabase"] = f"error: {str(e)}"
+
+    # Optional: check Telegram bot object exists
+    try:
+        status["telegram_bot"] = "ok" if application.bot else "not_initialized"
+    except Exception as e:
+        status["telegram_bot"] = f"error: {str(e)}"
+
+    return status
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
