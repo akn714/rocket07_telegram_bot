@@ -1,7 +1,6 @@
-"""Telegram bot (webhook mode) to update Supabase database."""
+"""Telegram bot to update Supabase database."""
 
 import os
-from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from supabase_client import get_supabase
@@ -10,15 +9,12 @@ from datetime import datetime, date, timedelta
 
 load_dotenv()
 
+# Get bot token
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-app = FastAPI()
-application = Application.builder().token(BOT_TOKEN).build()
 
-
-# -------- Commands -------- #
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send a message when the command /start is issued."""
     await update.message.reply_text(
         "Hi! Use:\n"
         "/set_delivery_charge <value>\n"
@@ -28,9 +24,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def set_delivery_charge(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def set_delivery_charge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Update delivery_charge in the database."""
     try:
-        value = int(float(context.args[0]))
+        value = int(float(context.args[0]))  # handles decimals too
         supabase = get_supabase()
 
         supabase.table('config') \
@@ -46,7 +43,8 @@ async def set_delivery_charge(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(f"Error: {str(e)}")
 
 
-async def start_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Set is_delivery_closed = False (orders open)."""
     try:
         supabase = get_supabase()
 
@@ -61,7 +59,8 @@ async def start_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Error: {str(e)}")
 
 
-async def close_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def close_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Set is_delivery_closed = True (orders closed)."""
     try:
         supabase = get_supabase()
 
@@ -108,61 +107,18 @@ async def today_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Error: {str(e)}")
 
+def main() -> None:
+    """Start the bot."""
+    application = Application.builder().token(BOT_TOKEN).build()
 
-# -------- Register handlers -------- #
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("set_delivery_charge", set_delivery_charge))
+    application.add_handler(CommandHandler("start_orders", start_orders))
+    application.add_handler(CommandHandler("close_orders", close_orders))
+    application.add_handler(CommandHandler("today_orders", today_orders))
 
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("set_delivery_charge", set_delivery_charge))
-application.add_handler(CommandHandler("start_orders", start_orders))
-application.add_handler(CommandHandler("close_orders", close_orders))
-application.add_handler(CommandHandler("today_orders", today_orders))
+    application.run_polling()
 
-
-# -------- Lifecycle Fix (IMPORTANT) -------- #
-
-@app.on_event("startup")
-async def startup():
-    await application.initialize()
-    await application.start()
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    await application.stop()
-    await application.shutdown()
-
-
-# -------- Webhook Endpoint -------- #
-
-@app.post("/")
-async def webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, application.bot)
-    await application.process_update(update)
-    return {"ok": True}
-
-@app.get("/check-alive")
-async def check_alive():
-    status = {
-        "server": "ok"
-    }
-
-    # Optional: check Supabase connectivity
-    try:
-        supabase = get_supabase()
-        supabase.table("config").select("*").limit(1).execute()
-        status["supabase"] = "ok"
-    except Exception as e:
-        status["supabase"] = f"error: {str(e)}"
-
-    # Optional: check Telegram bot object exists
-    try:
-        status["telegram_bot"] = "ok" if application.bot else "not_initialized"
-    except Exception as e:
-        status["telegram_bot"] = f"error: {str(e)}"
-
-    return status
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    main()
