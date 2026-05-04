@@ -11,10 +11,22 @@ load_dotenv()
 
 # Get bot token
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
 
+def _is_authorized(update: Update) -> bool:
+    chat = update.effective_chat or getattr(update, 'message', None)
+    return bool(chat and chat.id == ADMIN_CHAT_ID)
+
+
+async def _reply_unauthorized(update: Update):
+    await update.message.reply_text("⛔ Unauthorized access. This bot is for the admin only.")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
+    if not _is_authorized(update):
+        await _reply_unauthorized(update)
+        return
+
     await update.message.reply_text(
         "Hi! Use:\n"
         "/set_delivery_charge <value>\n"
@@ -26,6 +38,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def set_delivery_charge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Update delivery_charge in the database."""
+    if not _is_authorized(update):
+        await _reply_unauthorized(update)
+        return
+
     try:
         value = int(float(context.args[0]))  # handles decimals too
         supabase = get_supabase()
@@ -45,6 +61,10 @@ async def set_delivery_charge(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def start_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Set is_delivery_closed = False (orders open)."""
+    if not _is_authorized(update):
+        await _reply_unauthorized(update)
+        return
+
     try:
         supabase = get_supabase()
 
@@ -61,6 +81,10 @@ async def start_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def close_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Set is_delivery_closed = True (orders closed)."""
+    if not _is_authorized(update):
+        await _reply_unauthorized(update)
+        return
+
     try:
         supabase = get_supabase()
 
@@ -76,6 +100,10 @@ async def close_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def today_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_authorized(update):
+        await _reply_unauthorized(update)
+        return
+
     try:
         supabase = get_supabase()
 

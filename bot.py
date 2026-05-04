@@ -11,14 +11,29 @@ from datetime import datetime, date, timedelta
 load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
 
 app = FastAPI()
 application = Application.builder().token(BOT_TOKEN).build()
 
 
+def _is_authorized(update: Update) -> bool:
+    chat = update.effective_chat or getattr(update, 'message', None)
+    return bool(chat and chat.id == ADMIN_CHAT_ID)
+
+
+async def _reply_unauthorized(update: Update):
+    await update.message.reply_text("⛔ Unauthorized access. This bot is for the admin only.")
+
+
 # -------- Commands -------- #
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("Received /start command")
+    if not _is_authorized(update):
+        await _reply_unauthorized(update)
+        return
+
     await update.message.reply_text(
         "Hi! Use:\n"
         "/set_delivery_charge <value>\n"
@@ -29,6 +44,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def set_delivery_charge(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("Received /set_delivery_charge command")
+    if not _is_authorized(update):
+        await _reply_unauthorized(update)
+        return
+
     try:
         value = int(float(context.args[0]))
         supabase = get_supabase()
@@ -47,6 +67,11 @@ async def set_delivery_charge(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def start_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("Received /start_orders command")
+    if not _is_authorized(update):
+        await _reply_unauthorized(update)
+        return
+
     try:
         supabase = get_supabase()
 
@@ -62,6 +87,11 @@ async def start_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def close_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("Received /close_orders command")
+    if not _is_authorized(update):
+        await _reply_unauthorized(update)
+        return
+
     try:
         supabase = get_supabase()
 
@@ -77,6 +107,11 @@ async def close_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def today_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("Received /today_orders command")
+    if not _is_authorized(update):
+        await _reply_unauthorized(update)
+        return
+
     try:
         supabase = get_supabase()
 
@@ -137,6 +172,7 @@ async def shutdown():
 @app.post("/")
 async def webhook(request: Request):
     data = await request.json()
+    print(data.get("0"))
     update = Update.de_json(data, application.bot)
     await application.process_update(update)
     return {"ok": True}
